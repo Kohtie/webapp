@@ -1,23 +1,219 @@
 <!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
+<html lang="ru">
 <head>
-    <title>Быстрый старт. Размещение интерактивной карты на странице</title>
-    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-    <script src="https://api-maps.yandex.ru/2.1/?apikey=bbd42d21-8fb1-4acd-898e-26ae2f9c0d2b&lang=ru_RU" type="text/javascript">
-    </script>
+    <meta charset="UTF-8">
+    <title>Telegram Бот - Путешествия</title>
+    
+    <script src="https://api-maps.yandex.ru/2.1/?lang=ru_RU&apikey=bbd42d21-8fb1-4acd-898e-26ae2f9c0d2b" type="text/javascript"></script>
     <script type="text/javascript">
         ymaps.ready(init);
-        function init(){
+
+        function init() {
+            // Создаём карту, центрируем на Москве
             var myMap = new ymaps.Map("map", {
-                center: [55.76, 37.64],
-                zoom: 7
+                center: [55.751244, 37.618423], // Москва
+                zoom: 10
             });
+
+            // Переменные для меток отправления и назначения
+            var fromPlacemark = null;
+            var toPlacemark = null;
+
+            // Инициализация SuggestView для автоподсказок
+            var suggestViewFrom = new ymaps.SuggestView('from');
+            var suggestViewTo = new ymaps.SuggestView('to');
+
+            // Обработчики выбора адреса из автоподсказки
+            suggestViewFrom.events.add('select', function (event) {
+                var selectedAddress = event.get('item').value;
+                geocodeAddress(selectedAddress, 'from');
+            });
+
+            suggestViewTo.events.add('select', function (event) {
+                var selectedAddress = event.get('item').value;
+                geocodeAddress(selectedAddress, 'to');
+            });
+
+            // Функция геокодирования адреса и размещения метки
+            function geocodeAddress(address, type) {
+                ymaps.geocode(address, { results: 1 }).then(function (res) {
+                    var obj = res.geoObjects.get(0);
+                    if (obj) {
+                        var coords = obj.geometry.getCoordinates();
+                        if (type === 'from') {
+                            if (fromPlacemark) {
+                                myMap.geoObjects.remove(fromPlacemark);
+                            }
+                            fromPlacemark = createPlacemark(coords, 'islands#greenCircleIcon');
+                            myMap.geoObjects.add(fromPlacemark);
+                        } else if (type === 'to') {
+                            if (toPlacemark) {
+                                myMap.geoObjects.remove(toPlacemark);
+                            }
+                            toPlacemark = createPlacemark(coords, 'islands#redCircleIcon');
+                            myMap.geoObjects.add(toPlacemark);
+                        }
+                        myMap.setCenter(coords, 12, {
+                            checkZoomRange: true
+                        });
+                    } else {
+                        alert("Адрес не найден: " + address);
+                    }
+                });
+            }
+
+            // Функция создания метки с заданным пресетом
+            function createPlacemark(coords, preset) {
+                return new ymaps.Placemark(coords, {}, {
+                    preset: preset,
+                    draggable: true
+                });
+            }
+
+            // Переменная для отслеживания текущего режима выбора
+            var currentSelection = 'from'; // По умолчанию отправление
+
+            // Обработчики переключения режима выбора
+            document.getElementById('selectFrom').addEventListener('change', function() {
+                if (this.checked) {
+                    currentSelection = 'from';
+                }
+            });
+
+            document.getElementById('selectTo').addEventListener('change', function() {
+                if (this.checked) {
+                    currentSelection = 'to';
+                }
+            });
+
+            // Обработчик кликов по карте
+            myMap.events.add('click', function (e) {
+                var coords = e.get('coords');
+                ymaps.geocode(coords).then(function (res) {
+                    var obj = res.geoObjects.getFirst();
+                    if (obj) {
+                        var address = obj.getAddressLine();
+                        if (currentSelection === 'from') {
+                            // Удаляем предыдущую метку отправления, если есть
+                            if (fromPlacemark) {
+                                myMap.geoObjects.remove(fromPlacemark);
+                            }
+                            // Создаём новую метку отправления
+                            fromPlacemark = createPlacemark(coords, 'islands#greenCircleIcon');
+                            myMap.geoObjects.add(fromPlacemark);
+                            // Заполняем поле "Место отправления" адресом
+                            document.getElementById('from').value = address;
+                        } else if (currentSelection === 'to') {
+                            // Удаляем предыдущую метку назначения, если есть
+                            if (toPlacemark) {
+                                myMap.geoObjects.remove(toPlacemark);
+                            }
+                            // Создаём новую метку назначения
+                            toPlacemark = createPlacemark(coords, 'islands#redCircleIcon');
+                            myMap.geoObjects.add(toPlacemark);
+                            // Заполняем поле "Место назначения" адресом
+                            document.getElementById('to').value = address;
+                        }
+                        // Центрируем карту на выбранной точке
+                        myMap.setCenter(coords, 12, {
+                            checkZoomRange: true
+                        });
+                    }
+                });
+            });
+
+            // Обработка нажатия на кнопку "Подтвердить"
+            document.getElementById('confirmButton').addEventListener('click', function() {
+                if (fromPlacemark && toPlacemark) {
+                    var fromCoords = fromPlacemark.geometry.getCoordinates();
+                    var toCoords = toPlacemark.geometry.getCoordinates();
+                    var fromAddress = document.getElementById('from').value;
+                    var toAddress = document.getElementById('to').value;
+                    sendDataToBot(fromAddress, fromCoords, toAddress, toCoords);
+                } else {
+                    alert("Пожалуйста, выберите места отправления и назначения.");
+                }
+            });
+
+            // Функция отправки данных обратно в Telegram бота
+            function sendDataToBot(fromAddress, fromCoords, toAddress, toCoords) {
+                if (window.Telegram.WebApp) {
+                    const data = {
+                        from: {
+                            address: fromAddress,
+                            coordinates: fromCoords
+                        },
+                        to: {
+                            address: toAddress,
+                            coordinates: toCoords
+                        }
+                    };
+                    // Передача данных обратно в Telegram бота
+                    window.Telegram.WebApp.sendData(JSON.stringify(data));
+                } else {
+                    console.log("Telegram WebApp не найден");
+                }
+            }
+        </script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
         }
-    </script>
+        #map {
+            width: 100%;
+            height: 500px;
+            margin-top: 20px;
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+        .selection-mode {
+            margin-bottom: 15px;
+        }
+        .selection-mode label {
+            margin-right: 10px;
+        }
+        #confirmButton {
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+    </style>
 </head>
-
 <body>
-    <div id="map" style="width: 600px; height: 400px"></div>
-</body>
 
+    <h1>Планирование путешествия</h1>
+
+    
+    <div class="selection-mode">
+        <label><input type="radio" name="selection" value="from" id="selectFrom" checked> Отправление</label>
+        <label><input type="radio" name="selection" value="to" id="selectTo"> Назначение</label>
+    </div>
+
+    
+    <div class="input-group">
+        <label for="from">Место отправления:</label>
+        <input type="text" id="from" placeholder="Начните вводить адрес...">
+    </div>
+
+    <div class="input-group">
+        <label for="to">Место назначения:</label>
+        <input type="text" id="to" placeholder="Начните вводить адрес...">
+    </div>
+
+    
+    <button id="confirmButton">Подтвердить</button>
+    <div id="map"></div>
+
+
+</body>
 </html>
