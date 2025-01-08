@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Telegram Бот - Путешествия</title>
-    <script src="https://api-maps.yandex.ru/2.1/?lang=ru_RU&amp;apikey=42675ca1-e0b2-42e3-bb5c-609622616a65" type="text/javascript"></script>
+    <script src="https://api-maps.yandex.ru/2.1/?lang=ru_RU&apikey=42675ca1-e0b2-42e3-bb5c-609622616a65" type="text/javascript"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -26,11 +26,26 @@
             padding: 8px;
             box-sizing: border-box;
         }
+        .selection-mode {
+            margin-bottom: 15px;
+        }
+        .selection-mode label {
+            margin-right: 10px;
+        }
+        #confirmButton {
+            padding: 10px 20px;
+            font-size: 16px;
+        }
     </style>
 </head>
 <body>
 
     <h1>Планирование путешествия</h1>
+
+    <div class="selection-mode">
+        <label><input type="radio" name="selection" value="from" checked> Отправление</label>
+        <label><input type="radio" name="selection" value="to"> Назначение</label>
+    </div>
 
     <div class="input-group">
         <label for="from">Место отправления:</label>
@@ -42,24 +57,21 @@
         <input type="text" id="to" placeholder="Начните вводить адрес...">
     </div>
 
-    <div>
-        <button id="confirmButton">Подтвердить</button>
-    </div>
+    <button id="confirmButton">Подтвердить</button>
 
     <div id="map"></div>
-    
 
     <script type="text/javascript">
         ymaps.ready(init);
 
         function init() {
-            // Создаем карту
+            // Создаём карту
             var myMap = new ymaps.Map("map", {
                 center: [55.751244, 37.618423], // Москва
                 zoom: 10
             });
 
-            // Создаем объекты для меток отправления и назначения
+            // Переменные для меток
             var fromPlacemark = null;
             var toPlacemark = null;
 
@@ -74,7 +86,7 @@
                     if (fromPlacemark) {
                         myMap.geoObjects.remove(fromPlacemark);
                     }
-                    fromPlacemark = createPlacemark(coords);
+                    fromPlacemark = createPlacemark(coords, 'islands#greenCircleIcon');
                     myMap.geoObjects.add(fromPlacemark);
                     myMap.setCenter(coords, 12, {
                         checkZoomRange: true
@@ -89,7 +101,7 @@
                     if (toPlacemark) {
                         myMap.geoObjects.remove(toPlacemark);
                     }
-                    toPlacemark = createPlacemark(coords);
+                    toPlacemark = createPlacemark(coords, 'islands#redCircleIcon');
                     myMap.geoObjects.add(toPlacemark);
                     myMap.setCenter(coords, 12, {
                         checkZoomRange: true
@@ -111,35 +123,53 @@
             }
 
             // Функция создания метки
-            function createPlacemark(coords) {
+            function createPlacemark(coords, preset) {
                 return new ymaps.Placemark(coords, {}, {
-                    preset: 'islands#blueCircleIcon',
+                    preset: preset,
                     draggable: true
                 });
             }
 
-            // После выбора мест и подтверждения выбора
-            function sendDataToBot(fromAddress, fromCoords, toAddress, toCoords) {
-                if (window.Telegram.WebApp) {
-                    const data = {
-                        from: {
-                            address: fromAddress,
-                            coordinates: fromCoords
-                        },
-                        to: {
-                            address: toAddress,
-                            coordinates: toCoords
-                        }
-                    };
-                    // Отправка данных обратно в Telegram бота
-                    window.Telegram.WebApp.sendData(JSON.stringify(data));
-                } else {
-                    console.log("Telegram WebApp not found");
+            // Определение текущего режима выбора точки
+            var currentSelection = 'from'; // По умолчанию отправление
+
+            var radioButtons = document.getElementsByName('selection');
+            radioButtons.forEach = Array.prototype.forEach;
+            radioButtons.forEach(function(radio) {
+                radio.addEventListener('change', function(event) {
+                    currentSelection = event.target.value;
+                });
+            });
+
+            // Позволяет выбирать места напрямую на карте
+            myMap.events.add('click', function (e) {
+                var coords = e.get('coords');
+
+                // Создание метки в зависимости от текущего выбора (from или to)
+                if (currentSelection === 'from') {
+                    if (fromPlacemark) {
+                        myMap.geoObjects.remove(fromPlacemark);
+                    }
+                    fromPlacemark = createPlacemark(coords, 'islands#greenCircleIcon');
+                    myMap.geoObjects.add(fromPlacemark);
+                    ymaps.geocode(coords).then(function (res) {
+                        var address = res.geoObjects.get(0).getAddressLine();
+                        document.getElementById('from').value = address;
+                    });
+                } else if (currentSelection === 'to') {
+                    if (toPlacemark) {
+                        myMap.geoObjects.remove(toPlacemark);
+                    }
+                    toPlacemark = createPlacemark(coords, 'islands#redCircleIcon');
+                    myMap.geoObjects.add(toPlacemark);
+                    ymaps.geocode(coords).then(function (res) {
+                        var address = res.geoObjects.get(0).getAddressLine();
+                        document.getElementById('to').value = address;
+                    });
                 }
-            }
-            
-            // Пример вызова функции после выбора обоих мест
-            // Предположим, что пользователь нажал кнопку "Подтвердить"
+            });
+
+            // Обработка нажатия на кнопку "Подтвердить"
             document.getElementById('confirmButton').addEventListener('click', function() {
                 if (fromPlacemark && toPlacemark) {
                     var fromCoords = fromPlacemark.geometry.getCoordinates();
@@ -152,34 +182,25 @@
                 }
             });
 
-            // Дополнительно: Позволяет выбирать места напрямую на карте
-            myMap.events.add('click', function (e) {
-                var coords = e.get('coords');
-                // Если пользователь выбирает место отправления
-                if (document.activeElement === document.getElementById('from')) {
-                    if (fromPlacemark) {
-                        myMap.geoObjects.remove(fromPlacemark);
-                    }
-                    fromPlacemark = createPlacemark(coords);
-                    myMap.geoObjects.add(fromPlacemark);
-                    ymaps.geocode(coords).then(function (res) {
-                        var address = res.geoObjects.get(0).getAddressLine();
-                        document.getElementById('from').value = address;
-                    });
+            // Функция отправки данных в Telegram бот
+            function sendDataToBot(fromAddress, fromCoords, toAddress, toCoords) {
+                if (window.Telegram.WebApp) {
+                    const data = {
+                        from: {
+                            address: fromAddress,
+                            coordinates: fromCoords
+                        },
+                        to: {
+                            address: toAddress,
+                            coordinates: toCoords
+                        }
+                    };
+                    // Передача данных обратно в Telegram бота
+                    window.Telegram.WebApp.sendData(JSON.stringify(data));
+                } else {
+                    console.log("Telegram WebApp не найден");
                 }
-                // Если пользователь выбирает место назначения
-                else if (document.activeElement === document.getElementById('to')) {
-                    if (toPlacemark) {
-                        myMap.geoObjects.remove(toPlacemark);
-                    }
-                    toPlacemark = createPlacemark(coords);
-                    myMap.geoObjects.add(toPlacemark);
-                    ymaps.geocode(coords).then(function (res) {
-                        var address = res.geoObjects.get(0).getAddressLine();
-                        document.getElementById('to').value = address;
-                    });
-                }
-            });
+            }
         }
     </script>
 
