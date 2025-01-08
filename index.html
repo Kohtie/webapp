@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <title>Telegram Бот - Путешествия</title>
-    <script src="https://api-maps.yandex.ru/2.1/?lang=ru_RU&amp;apikey=bbd42d21-8fb1-4acd-898e-26ae2f9c0d2b" type="text/javascript"></script>
+    
+    <script src="https://api-maps.yandex.ru/2.1/?lang=ru_RU&apikey=bbd42d21-8fb1-4acd-898e-26ae2f9c0d2b" type="text/javascript"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -26,12 +27,29 @@
             padding: 8px;
             box-sizing: border-box;
         }
+        .selection-mode {
+            margin-bottom: 15px;
+        }
+        .selection-mode label {
+            margin-right: 10px;
+        }
+        #confirmButton {
+            padding: 10px 20px;
+            font-size: 16px;
+        }
     </style>
 </head>
 <body>
 
     <h1>Планирование путешествия</h1>
 
+    
+    <div class="selection-mode">
+        <label><input type="radio" name="selection" value="from" id="selectFrom" checked> Отправление</label>
+        <label><input type="radio" name="selection" value="to" id="selectTo"> Назначение</label>
+    </div>
+
+    
     <div class="input-group">
         <label for="from">Место отправления:</label>
         <input type="text" id="from" placeholder="Начните вводить адрес...">
@@ -42,107 +60,162 @@
         <input type="text" id="to" placeholder="Начните вводить адрес...">
     </div>
 
+    
+    <button id="confirmButton">Подтвердить</button>
+
+    
     <div id="map"></div>
 
     <script type="text/javascript">
         ymaps.ready(init);
 
         function init() {
-            // Создаем карту
+            // Создаём карту, центрируем на Москве
             var myMap = new ymaps.Map("map", {
                 center: [55.751244, 37.618423], // Москва
                 zoom: 10
             });
 
-            // Создаем объекты для меток отправления и назначения
+            // Переменные для меток отправления и назначения
             var fromPlacemark = null;
             var toPlacemark = null;
 
-            // Инициализация подсказок автозаполнения
+            // Инициализация SuggestView для автоподсказок
             var suggestViewFrom = new ymaps.SuggestView('from');
             var suggestViewTo = new ymaps.SuggestView('to');
 
-            // Обработчик выбора места отправления
+            // Обработчики выбора адреса из автоподсказки
             suggestViewFrom.events.add('select', function (event) {
-                var selected = event.get('item').value;
-                geocodeAddress(selected, function (coords) {
-                    if (fromPlacemark) {
-                        myMap.geoObjects.remove(fromPlacemark);
-                    }
-                    fromPlacemark = createPlacemark(coords);
-                    myMap.geoObjects.add(fromPlacemark);
-                    myMap.setCenter(coords, 12, {
-                        checkZoomRange: true
-                    });
-                });
+                var selectedAddress = event.get('item').value;
+                geocodeAddress(selectedAddress, 'from');
             });
 
-            // Обработчик выбора места назначения
             suggestViewTo.events.add('select', function (event) {
-                var selected = event.get('item').value;
-                geocodeAddress(selected, function (coords) {
-                    if (toPlacemark) {
-                        myMap.geoObjects.remove(toPlacemark);
-                    }
-                    toPlacemark = createPlacemark(coords);
-                    myMap.geoObjects.add(toPlacemark);
-                    myMap.setCenter(coords, 12, {
-                        checkZoomRange: true
-                    });
-                });
+                var selectedAddress = event.get('item').value;
+                geocodeAddress(selectedAddress, 'to');
             });
 
-            // Функция геокодирования адреса
-            function geocodeAddress(address, callback) {
+            // Функция геокодирования адреса и размещения метки
+            function geocodeAddress(address, type) {
                 ymaps.geocode(address, { results: 1 }).then(function (res) {
                     var obj = res.geoObjects.get(0);
                     if (obj) {
                         var coords = obj.geometry.getCoordinates();
-                        callback(coords);
+                        if (type === 'from') {
+                            if (fromPlacemark) {
+                                myMap.geoObjects.remove(fromPlacemark);
+                            }
+                            fromPlacemark = createPlacemark(coords, 'islands#greenCircleIcon');
+                            myMap.geoObjects.add(fromPlacemark);
+                        } else if (type === 'to') {
+                            if (toPlacemark) {
+                                myMap.geoObjects.remove(toPlacemark);
+                            }
+                            toPlacemark = createPlacemark(coords, 'islands#redCircleIcon');
+                            myMap.geoObjects.add(toPlacemark);
+                        }
+                        myMap.setCenter(coords, 12, {
+                            checkZoomRange: true
+                        });
                     } else {
                         alert("Адрес не найден: " + address);
                     }
                 });
             }
 
-            // Функция создания метки
-            function createPlacemark(coords) {
+            // Функция создания метки с заданным пресетом
+            function createPlacemark(coords, preset) {
                 return new ymaps.Placemark(coords, {}, {
-                    preset: 'islands#blueCircleIcon',
+                    preset: preset,
                     draggable: true
                 });
             }
 
-            // Дополнительно: Позволяет выбирать места напрямую на карте
-            myMap.events.add('click', function (e) {
-                var coords = e.get('coords');
-                // Если пользователь выбирает место отправления
-                if (document.activeElement === document.getElementById('from')) {
-                    if (fromPlacemark) {
-                        myMap.geoObjects.remove(fromPlacemark);
-                    }
-                    fromPlacemark = createPlacemark(coords);
-                    myMap.geoObjects.add(fromPlacemark);
-                    ymaps.geocode(coords).then(function (res) {
-                        var address = res.geoObjects.get(0).getAddressLine();
-                        document.getElementById('from').value = address;
-                    });
-                }
-                // Если пользователь выбирает место назначения
-                else if (document.activeElement === document.getElementById('to')) {
-                    if (toPlacemark) {
-                        myMap.geoObjects.remove(toPlacemark);
-                    }
-                    toPlacemark = createPlacemark(coords);
-                    myMap.geoObjects.add(toPlacemark);
-                    ymaps.geocode(coords).then(function (res) {
-                        var address = res.geoObjects.get(0).getAddressLine();
-                        document.getElementById('to').value = address;
-                    });
+            // Переменная для отслеживания текущего режима выбора
+            var currentSelection = 'from'; // По умолчанию отправление
+
+            // Обработчики переключения режима выбора
+            document.getElementById('selectFrom').addEventListener('change', function() {
+                if (this.checked) {
+                    currentSelection = 'from';
                 }
             });
-        }
-    </script>
+
+            document.getElementById('selectTo').addEventListener('change', function() {
+                if (this.checked) {
+                    currentSelection = 'to';
+                }
+            });
+
+            // Обработчик кликов по карте
+            myMap.events.add('click', function (e) {
+                var coords = e.get('coords');
+                ymaps.geocode(coords).then(function (res) {
+                    var obj = res.geoObjects.getFirst();
+                    if (obj) {
+                        var address = obj.getAddressLine();
+                        if (currentSelection === 'from') {
+                            // Удаляем предыдущую метку отправления, если есть
+                            if (fromPlacemark) {
+                                myMap.geoObjects.remove(fromPlacemark);
+                            }
+                            // Создаём новую метку отправления
+                            fromPlacemark = createPlacemark(coords, 'islands#greenCircleIcon');
+                            myMap.geoObjects.add(fromPlacemark);
+                            // Заполняем поле "Место отправления" адресом
+                            document.getElementById('from').value = address;
+                        } else if (currentSelection === 'to') {
+                            // Удаляем предыдущую метку назначения, если есть
+                            if (toPlacemark) {
+                                myMap.geoObjects.remove(toPlacemark);
+                            }
+                            // Создаём новую метку назначения
+                            toPlacemark = createPlacemark(coords, 'islands#redCircleIcon');
+                            myMap.geoObjects.add(toPlacemark);
+                            // Заполняем поле "Место назначения" адресом
+                            document.getElementById('to').value = address;
+                        }
+                        // Центрируем карту на выбранной точке
+                        myMap.setCenter(coords, 12, {
+                            checkZoomRange: true
+                        });
+                    }
+                });
+            });
+
+            // Обработка нажатия на кнопку "Подтвердить"
+            document.getElementById('confirmButton').addEventListener('click', function() {
+                if (fromPlacemark && toPlacemark) {
+                    var fromCoords = fromPlacemark.geometry.getCoordinates();
+                    var toCoords = toPlacemark.geometry.getCoordinates();
+                    var fromAddress = document.getElementById('from').value;
+                    var toAddress = document.getElementById('to').value;
+                    sendDataToBot(fromAddress, fromCoords, toAddress, toCoords);
+                } else {
+                    alert("Пожалуйста, выберите места отправления и назначения.");
+                }
+            });
+
+            // Функция отправки данных обратно в Telegram бота
+            function sendDataToBot(fromAddress, fromCoords, toAddress, toCoords) {
+                if (window.Telegram.WebApp) {
+                    const data = {
+                        from: {
+                            address: fromAddress,
+                            coordinates: fromCoords
+                        },
+                        to: {
+                            address: toAddress,
+                            coordinates: toCoords
+                        }
+                    };
+                    // Передача данных обратно в Telegram бота
+                    window.Telegram.WebApp.sendData(JSON.stringify(data));
+                } else {
+                    console.log("Telegram WebApp не найден");
+                }
+            }
+        </script>
 
 </body>
 </html>
