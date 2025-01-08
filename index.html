@@ -2,57 +2,131 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Выбор Местоположений для Путешествия</title>
+    <title>Travel Together - Выбор Местоположений для Путешествия</title>
     
     <style>
+        /* Основные стили страницы */
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
-            padding: 10px;
-        }
-        .container {
+            padding: 0;
+            background-color: #f6f6f6;
+            color: #2c2f33;
             display: flex;
             flex-direction: column;
             height: 100vh;
         }
+
+        /* Контейнер для всех элементов */
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            padding: 16px;
+            box-sizing: border-box;
+        }
+
+        /* Секции управления (чекбоксы) */
         .controls {
-            margin-bottom: 10px;
+            display: flex;
+            justify-content: flex-start;
+            margin-bottom: 12px;
         }
+
         .controls label {
-            margin-right: 10px;
+            display: flex;
+            align-items: center;
+            margin-right: 20px;
+            font-size: 16px;
+            cursor: pointer;
         }
+
+        .controls input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            margin-right: 8px;
+            accent-color: #0088cc; /* Синий цвет акцента Telegram */
+            cursor: pointer;
+        }
+
+        /* Поля для адресов */
         .addresses {
             display: flex;
             flex-direction: column;
-            margin-bottom: 10px;
+            margin-bottom: 12px;
         }
+
         .addresses input {
-            width: 100%;
-            padding: 5px;
-            margin-bottom: 5px;
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            font-size: 15px;
+            background-color: #fff;
+            transition: border-color 0.2s;
         }
+
+        .addresses input:focus {
+            border-color: #0088cc;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(0, 136, 204, 0.2);
+        }
+
+        /* Карта */
         #map {
             flex-grow: 1;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            margin-bottom: 12px;
         }
+
+        /* Кнопка подтверждения */
         .confirm-button {
-            padding: 10px;
+            padding: 12px 0;
+            margin-bottom:15px;
             background-color: #0088cc;
-            color: white;
+            color: #ffffff;
             border: none;
+            border-radius: 8px;
             cursor: pointer;
             font-size: 16px;
+            transition: background-color 0.2s, box-shadow 0.2s;
         }
+
         .confirm-button:hover {
-            background-color: #006699;
+            background-color: #006aab;
+            box-shadow: 0 4px 12px rgba(0, 136, 204, 0.3);
+        }
+
+        .confirm-button:active {
+            background-color: #005b99;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Мобильная адаптация */
+        @media (max-width: 600px) {
+            .controls label {
+                margin-right: 10px;
+                font-size: 14px;
+            }
+
+            .addresses input {
+                font-size: 14px;
+            }
+
+            .confirm-button {
+                font-size: 15px;
+            }
         }
     </style>
     
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    
-    <script src="https://api-maps.yandex.ru/2.1/?apikey=bbd42d21-8fb1-4acd-898e-26ae2f9c0d2b&lang=ru_RU" type="text/javascript"></script>
+    <script src="https://api-maps.yandex.ru/2.1/?lang=ru_RU" type="text/javascript"></script>
 </head>
 <body>
     <div class="container">
+        
         <div class="controls">
             <label>
                 <input type="checkbox" id="departure-checkbox" /> Место отправки
@@ -61,12 +135,16 @@
                 <input type="checkbox" id="arrival-checkbox" /> Место прибытия
             </label>
         </div>
+
+        
         <div class="addresses">
             <input type="text" id="departure-address" placeholder="Место отправки" readonly />
             <input type="text" id="arrival-address" placeholder="Место прибытия" readonly />
         </div>
-        <div id="map" style="width: 100%; height: 100%;"></div>
         <button class="confirm-button" id="confirm-button">Подтвердить выбранные адреса</button>
+        
+        <div id="map"></div>
+
     </div>
 
     <script>
@@ -77,8 +155,25 @@
         // Инициализация Telegram Web Apps
         var tg = window.Telegram.WebApp;
 
-        // Фокус на окне Telegram для корректной работы
+        // Развернуть веб-приложение для полного экрана
         tg.expand();
+
+        // Получение элементов чекбоксов
+        const departureCheckbox = document.getElementById('departure-checkbox');
+        const arrivalCheckbox = document.getElementById('arrival-checkbox');
+
+        // Добавление обработчиков для обеспечения взаимной эксклюзивности чекбоксов
+        departureCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                arrivalCheckbox.checked = false; // Снять выбор с "Место прибытия"
+            }
+        });
+
+        arrivalCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                departureCheckbox.checked = false; // Снять выбор с "Место отправки"
+            }
+        });
 
         // Функция инициализации карты
         ymaps.ready(init);
@@ -87,20 +182,24 @@
             // Создание экземпляра карты.
             var myMap = new ymaps.Map("map", {
                 center: [55.751244, 37.618423], // Координаты центра Москвы
-                zoom: 10
+                zoom: 10,
+                controls: ['zoomControl', 'searchControl']
             });
+
+            // Добавление пользовательского поиска
+            myMap.controls.add('searchControl', { float: 'right' });
 
             // Обработчик кликов по карте
             myMap.events.add('click', function (e) {
                 var coords = e.get('coords');
 
-                // Определяем, какие чекбоксы выбраны
-                var isDepartureSelected = document.getElementById('departure-checkbox').checked;
-                var isArrivalSelected = document.getElementById('arrival-checkbox').checked;
+                // Определяем, какой чекбокс выбран
+                var isDepartureSelected = departureCheckbox.checked;
+                var isArrivalSelected = arrivalCheckbox.checked;
 
                 // Если ни один чекбокс не выбран, выводим сообщение и выходим
                 if (!isDepartureSelected && !isArrivalSelected) {
-                    alert('Пожалуйста, выберите "Место отправки" или "Место прибытия" перед выбором на карте.');
+                    tg.showAlert('Пожалуйста, выберите "Место отправки" или "Место прибытия" перед выбором на карте.');
                     return;
                 }
 
@@ -113,24 +212,27 @@
                         departureAddress = address;
                         document.getElementById('departure-address').value = departureAddress;
                         // Снимаем выбор с чекбокса после выбора
-                        document.getElementById('departure-checkbox').checked = false;
+                        departureCheckbox.checked = false;
                     }
 
                     if (isArrivalSelected) {
                         arrivalAddress = address;
                         document.getElementById('arrival-address').value = arrivalAddress;
                         // Снимаем выбор с чекбокса после выбора
-                        document.getElementById('arrival-checkbox').checked = false;
+                        arrivalCheckbox.checked = false;
                     }
 
-                    // Добавляем метку на карту
+                    // Добавляем метку на карту с анимацией
                     var placemark = new ymaps.Placemark(coords, {
                         balloonContent: address
+                    }, {
+                        preset: 'islands#blueDotIconWithCaption',
+                        hideIconOnBalloonOpen: false
                     });
                     myMap.geoObjects.add(placemark);
                 }, function (err) {
                     console.error('Ошибка при геокодировании:', err);
-                    alert('Не удалось определить адрес по выбранным координатам.');
+                    tg.showAlert('Не удалось определить адрес по выбранным координатам.');
                 });
             });
         }
@@ -139,7 +241,7 @@
         document.getElementById('confirm-button').addEventListener('click', function () {
             // Проверяем, что оба адреса заполнены
             if (!departureAddress || !arrivalAddress) {
-                alert('Пожалуйста, укажите оба адреса перед подтверждением.');
+                tg.showAlert('Пожалуйста, укажите оба адреса перед подтверждением.');
                 return;
             }
 
