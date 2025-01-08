@@ -75,9 +75,89 @@
                 // Уровень масштабирования. Допустимые значения:
                 // от 0 (весь мир) до 19.
                 zoom: 7
+            });}
+            // Переменные для меток отправления и назначения
+            var fromPlacemark = null;
+            var toPlacemark = null;
+
+            // Инициализация SuggestView для автоподсказок
+            var suggestViewFrom = new ymaps.SuggestView('from');
+            var suggestViewTo = new ymaps.SuggestView('to');
+
+            // Обработчики выбора адреса из автоподсказки
+            suggestViewFrom.events.add('select', function (event) {
+                var selectedAddress = event.get('item').value;
+                geocodeAddress(selectedAddress, 'from');
             });
-        }
-        </script>
+
+            suggestViewTo.events.add('select', function (event) {
+                var selectedAddress = event.get('item').value;
+                geocodeAddress(selectedAddress, 'to');
+            });
+
+            // Функция геокодирования адреса и размещения метки
+            function geocodeAddress(address, type) {
+                ymaps.geocode(address, { results: 1 }).then(function (res) {
+                    var obj = res.geoObjects.get(0);
+                    if (obj) {
+                        var coords = obj.geometry.getCoordinates();
+                        if (type === 'from') {
+                            if (fromPlacemark) {
+                                myMap.geoObjects.remove(fromPlacemark);
+                            }
+                            fromPlacemark = createPlacemark(coords, 'islands#greenCircleIcon');
+                            myMap.geoObjects.add(fromPlacemark);
+                        } else if (type === 'to') {
+                            if (toPlacemark) {
+                                myMap.geoObjects.remove(toPlacemark);
+                            }
+                            toPlacemark = createPlacemark(coords, 'islands#redCircleIcon');
+                            myMap.geoObjects.add(toPlacemark);
+                        }
+                        myMap.setCenter(coords, 12, {
+                            checkZoomRange: true
+                        });
+                    } else {
+                        alert("Адрес не найден: " + address);
+                    }
+                });
+            }
+
+            //there
+
+            // Обработка нажатия на кнопку "Подтвердить"
+            document.getElementById('confirmButton').addEventListener('click', function() {
+                if (fromPlacemark && toPlacemark) {
+                    var fromCoords = fromPlacemark.geometry.getCoordinates();
+                    var toCoords = toPlacemark.geometry.getCoordinates();
+                    var fromAddress = document.getElementById('from').value;
+                    var toAddress = document.getElementById('to').value;
+                    sendDataToBot(fromAddress, fromCoords, toAddress, toCoords);
+                } else {
+                    alert("Пожалуйста, выберите места отправления и назначения.");
+                }
+            });
+
+            // Функция отправки данных обратно в Telegram бота
+            function sendDataToBot(fromAddress, fromCoords, toAddress, toCoords) {
+                if (window.Telegram.WebApp) {
+                    const data = {
+                        from: {
+                            address: fromAddress,
+                            coordinates: fromCoords
+                        },
+                        to: {
+                            address: toAddress,
+                            coordinates: toCoords
+                        }
+                    };
+                    // Передача данных обратно в Telegram бота
+                    window.Telegram.WebApp.sendData(JSON.stringify(data));
+                } else {
+                    console.log("Telegram WebApp не найден");
+                }
+            }
+    </script>
 
 </body>
 </html>
